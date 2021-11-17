@@ -255,6 +255,9 @@ def soft_sort_by_column_identity(tensor, regularization="l2", regularization_str
 ########################################################################################################################################################################
 ########################################################################################################################################################################
 
+import time
+from ascii_graph import Pyasciigraph
+
 class SoftSortByColumn4(torch.autograd.Function):
     @staticmethod
     def forward(ctx, tensor, regularization="l2", regularization_strength=1.0, column=0):
@@ -269,7 +272,8 @@ class SoftSortByColumn4(torch.autograd.Function):
 
         relevant_columns = tensor_t[..., column, :]
         permutation_columns = torch.argsort(relevant_columns, -1)
-        permutation_reshaped = permutation_columns.repeat_interleave(h, -2)
+        # permutation_reshaped = permutation_columns.repeat_interleave(h, -2)
+        permutation_reshaped = permutation_columns.view(b, 1, w).expand(b, h, w).contiguous().view(-1, w)
         s = tensor_t_merged.gather(-1, permutation_reshaped)
 
         # note reverse order of args
@@ -306,10 +310,6 @@ class SoftSortByColumn4(torch.autograd.Function):
         return grad_gathered, None, None, None
 
 def soft_sort_by_column4(values, regularization="l2", regularization_strength=1.0, column=0):
-    if len(values.shape) != 3:
-        raise ValueError(f"'values' should be a 2d-tensor but got {values.shape}")
-    if regularization not in ["l2", "kl"]:
-        raise ValueError(f"'regularization' should be a 'l2' or 'kl'")
     return SoftSortByColumn4.apply(values, regularization, regularization_strength, column)
 
 

@@ -1,6 +1,7 @@
 # Custom
 checkpoints/
 progress/
+highres_outputs/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

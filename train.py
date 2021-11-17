@@ -1,4 +1,5 @@
 # from models3_3 import CircleNetColorMulti
+from filters import get_sobel_filter, get_static_fast_gauss_blur
 from models import CircleNetColorMulti
 import torch
 from torch import nn
@@ -12,9 +13,12 @@ from datetime import datetime
 from pathlib import Path
 from itertools import count
 import torch.multiprocessing as mp
+import torchvision.transforms.functional as TF
+import tables
+import numpy as np
 
 
-n_shapes = 8
+n_shapes = 16
 # workers = 5
 workers = 3
 batch_size = 64
@@ -41,10 +45,10 @@ def unnormalize_functional(tensor, mean, std):
     std = std.view(3, 1, 1)
     return ((tensor*std)+mean).clamp(0, 1)
 
-mean = [0.5772, 0.4661, 0.4431]
-std = [0.4190, 0.3720, 0.3788]
+mean = [0.5061, 0.4254, 0.3828]
+std = [0.3043, 0.2838, 0.2833]
 
-my_transforms = transform = transforms.Compose([
+my_transforms = transforms.Compose([
     transforms.Resize((image_size,image_size)),
     transforms.ToTensor(),
     transforms.Normalize(mean, std),
@@ -55,7 +59,7 @@ std =  torch.tensor(std).to(device)
 
 # We can use an image folder dataset the way we have it setup.
 # Create the dataset
-dataset = dset.ImageFolder(root=r"G:\Simon\Documents\programming\github\flag_gan\data",
+dataset = dset.ImageFolder(root=r"C:\projects\data\celeba",
                            transform=my_transforms)
 # Create the dataloader
 dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size,
@@ -63,22 +67,26 @@ dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size,
 dl_length = len(dataloader)
 
 
-dataset_val = dset.ImageFolder(root=r"G:\Simon\Documents\programming\github\flag_gan\val",
+dataset_val = dset.ImageFolder(root=r"C:\projects\data\celeba_val",
                                transform=my_transforms)
 workers = 0
 # Create the dataloader
-dataloader_val = torch.utils.data.DataLoader(dataset_val, batch_size=batch_size,
+dataloader_val = torch.utils.data.DataLoader(dataset_val, batch_size=16,
                                              shuffle=False, num_workers=workers, persistent_workers=(workers > 0), pin_memory=True)
 
 # Create the networks
 netG = CircleNetColorMulti(
     device=device,
     imsize=image_size,
-    n_shapes=n_shapes
+    n_shapes=n_shapes,
+    minimum_sharpness=10
 ).to(device)
 
 optimizer_netG = optim.Adam(netG.parameters(), lr=lr, betas=(0.5, 0.999))
 
+
+sobel_filter = get_sobel_filter(4, device)
+gauss_filter = get_static_fast_gauss_blur(1, 2, device)
 
 def to_rgb(rgba):
     return rgba[..., :-1, :, :] * rgba[..., -1:, :, :]
@@ -91,7 +99,19 @@ def to_rgba(rgb):
 def criterion(pred_image, target):
     rgba_target = to_rgba(target)
 
-    return nn.functional.mse_loss(pred_image, rgba_target)
+    general_loss = nn.functional.mse_loss(pred_image, rgba_target)
+
+    detail_loss = nn.functional.l1_loss(
+        sobel_filter(pred_image),
+        sobel_filter(rgba_target)
+    )
+
+    return 0.9*general_loss + 0.1*detail_loss
+
+# def criterion(pred_image, target):
+#     rgba_target = to_rgba(target)
+
+#     return nn.functional.mse_loss(pred_image, rgba_target)
 
 scaler = torch.cuda.amp.GradScaler()
 
@@ -159,3 +179,23 @@ if __name__ == "__main__":
                     "opt": optimizer_netG.state_dict()
                 },
                 c_path / f"{global_step}__{err_val.item()}.pt")
+
+            # # Save tensors each output
+            # with torch.no_grad():
+            #     netG.return_mode = "shapes"
+            #     netG.eval()
+            #     pred_val_crisp = netG(fixed_target)
+            #     netG.return_mode = "bitmap"
+            #     netG.train()
+
+            # i_path = Path(f"./progress/{date}")
+            # i_path.mkdir(parents=True, exist_ok=True)
+            # f_path = i_path / "batch_outputs.h5"
+            # if not f_path.exists():
+            #     f = tables.open_file(str(f_path), mode='w')
+            #     atom = tables.Float64Atom()
+            #     batches_ea = f.create_earray(f.root, 'batches', atom, shape=(0, *pred_val_crisp.shape))
+            # else:
+            #     f = tables.open_file(str(f_path), mode='a')
+            #     f.root.batches.append(pred_val_crisp.unsqueeze(0).cpu().numpy())
+            # f.close()
