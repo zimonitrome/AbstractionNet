@@ -19,10 +19,8 @@ import numpy as np
 
 
 n_shapes = 16
-# workers = 5
 workers = 3
 batch_size = 64
-# batch_size = 2
 image_size = 64
 lr = 0.00001
 
@@ -108,20 +106,11 @@ def criterion(pred_image, target):
 
     return 0.9*general_loss + 0.1*detail_loss
 
-# def criterion(pred_image, target):
-#     rgba_target = to_rgba(target)
-
-#     return nn.functional.mse_loss(pred_image, rgba_target)
-
 scaler = torch.cuda.amp.GradScaler()
 
 fixed_target = next(iter(dataloader_val))[0].to(device)
 
 torch.backends.cudnn.benchmark = True
-
-# saved_state = torch.load(r"G:\Simon\Documents\programming\github\shapenet\checkpoints\2021-11-03-08.54.03\30000__0.07207467406988144.pt")
-# netG.load_state_dict(saved_state["G"])
-# optimizer_netG.load_state_dict(saved_state["opt"])
 
 if __name__ == "__main__":
     mp.set_start_method('spawn', force=True)

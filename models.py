@@ -3,9 +3,6 @@ from torch import nn
 import torchvision.models as models
 from einops import rearrange, repeat
 from differentiable_sorter_torchsort import soft_sort_by_column
-import time
-from ascii_graph import Pyasciigraph
-
 
 def freeze(model):
     for param in model.parameters():
@@ -25,7 +22,6 @@ def get_visible_mask(shapes):
         # alpha_b = (alpha_0 - alpha_a) / (1 - alpha_a)
         shape_alpha = shape[..., -1, :, :]
         alpha_visible = shape_alpha - accumulated_alpha * shape_alpha
-        # alpha_visible = accumulated_alpha * shape_alpha + (1-accumulated_alpha)
         shape_maks[i] = alpha_visible
         accumulated_alpha = (1 - shape_alpha) * accumulated_alpha + shape_alpha
     
@@ -37,12 +33,7 @@ class CircleNetColorMulti(nn.Module):
         self.device = device
         self.imsize = imsize
 
-        # resnet18 = models.resnet18()
-        # backbone = models.resnet18(pretrained=True)
         backbone = models.resnet18()
-        # freeze(backbone)
-        
-        # backbone = models.vgg16_bn()
 
         parameter_fields = [
             "sharpness", 
@@ -57,9 +48,6 @@ class CircleNetColorMulti(nn.Module):
             "green", 
             "blue"
         ]
-        # parameter_fields = ["sharpness", "pos_z", "pos_x", "pos_y", "width", "height", "rotation", "exponential", "red", "green", "blue"]
-        # parameter_bias   = [-20,         0,        0,        0,       0,        0,             0,     0,       0]
-        # parameter_bias   = [0,           0,        0,        0,       0,        0,             0,     0,       0]
         npf = len(parameter_fields)
 
         self.main = nn.Sequential(
@@ -71,11 +59,7 @@ class CircleNetColorMulti(nn.Module):
             nn.Sigmoid(),
         )
 
-        # self.main[-3].bias.data.copy_(
-        #     torch.tensor(
-        #         n_shapes*parameter_bias
-        #     , dtype=torch.float)
-        # )
+        # Initialize all shapes to be in 4x4 grid
         nrow = int(n_shapes**.5)
         radius = 1/(2*nrow)
         xy_positions = torch.linspace(0+radius, 1-radius, nrow)
@@ -167,8 +151,7 @@ class CircleNetColorMulti(nn.Module):
         """
         circle = self.draw_circle(args_tensor[..., :-3])
         rgb_ = args_tensor[..., -3:]
-        rgb = unnormalize_to(rgb_, -1.377565622329712, 1.470168948173523) # 0 and 1 in the normalized realm
-        # rgb = unnormalize_to(rgb_, -1.5, 1.5) # 0 and 1 in the normalized realm
+        rgb = unnormalize_to(rgb_, -1.5, 1.5) # 0 and 1 in the normalized realm
 
         return torch.concat([
             repeat(rgb, "... C -> ... C H W", H=self.imsize, W=self.imsize),
@@ -229,16 +212,5 @@ class CircleNetColorMulti(nn.Module):
 
         # [B C W H]
         rendered_images = self.composite_shapes(rencered_circles)
-
-        # test = [
-        #     ('s1', s1),
-        #     ('s2', s2),
-        #     ('s3', s3),
-        #     ('s4', s4)
-        #     ]
-
-        # graph = Pyasciigraph()
-        # for line in  graph.graph('test print', test):
-        #     print(line)
 
         return rendered_images
