@@ -180,22 +180,22 @@ if __name__ == "__main__":
                 },
                 c_path / f"{global_step}__{err_val.item()}.pt")
 
-            # # Save tensors each output
-            # with torch.no_grad():
-            #     netG.return_mode = "shapes"
-            #     netG.eval()
-            #     pred_val_crisp = netG(fixed_target)
-            #     netG.return_mode = "bitmap"
-            #     netG.train()
+            # Save tensors each output
+            with torch.no_grad():
+                netG.return_mode = "shapes"
+                netG.eval()
+                pred_val_crisp = netG(fixed_target)
+                netG.return_mode = "bitmap"
+                netG.train()
 
-            # i_path = Path(f"./progress/{date}")
-            # i_path.mkdir(parents=True, exist_ok=True)
-            # f_path = i_path / "batch_outputs.h5"
-            # if not f_path.exists():
-            #     f = tables.open_file(str(f_path), mode='w')
-            #     atom = tables.Float64Atom()
-            #     batches_ea = f.create_earray(f.root, 'batches', atom, shape=(0, *pred_val_crisp.shape))
-            # else:
-            #     f = tables.open_file(str(f_path), mode='a')
-            #     f.root.batches.append(pred_val_crisp.unsqueeze(0).cpu().numpy())
-            # f.close()
+            i_path = Path(f"./progress/{date}")
+            i_path.mkdir(parents=True, exist_ok=True)
+            f_path = i_path / "batch_outputs.h5"
+            if not f_path.exists():
+                f = tables.open_file(str(f_path), mode='w')
+                atom = tables.Float64Atom()
+                batches_ea = f.create_earray(f.root, 'batches', atom, shape=(0, *pred_val_crisp.shape))
+            else:
+                f = tables.open_file(str(f_path), mode='a')
+                f.root.batches.append(pred_val_crisp.unsqueeze(0).cpu().numpy())
+            f.close()
