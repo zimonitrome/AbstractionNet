@@ -1,6 +1,6 @@
 # from models3_3 import CircleNetColorMulti
 from filters import get_sobel_filter, get_static_fast_gauss_blur
-from models import CircleNetColorMulti
+from models import Model
 import torch
 from torch import nn
 import torch.nn.parallel
@@ -13,9 +13,10 @@ from datetime import datetime
 from pathlib import Path
 from itertools import count
 import torch.multiprocessing as mp
-import torchvision.transforms.functional as TF
 import tables
 import numpy as np
+
+from render_shape import ShapeRenderer
 
 
 n_shapes = 16
@@ -72,15 +73,12 @@ workers = 0
 dataloader_val = torch.utils.data.DataLoader(dataset_val, batch_size=16,
                                              shuffle=False, num_workers=workers, persistent_workers=(workers > 0), pin_memory=True)
 
-# Create the networks
-netG = CircleNetColorMulti(
-    device=device,
-    imsize=image_size,
-    n_shapes=n_shapes,
-    minimum_sharpness=10
-).to(device)
+# Create the network
+model = Model(n_shapes=n_shapes).to(device)
 
-optimizer_netG = optim.Adam(netG.parameters(), lr=lr, betas=(0.5, 0.999))
+optimizer = optim.Adam(model.parameters(), lr=lr, betas=(0.5, 0.999))
+
+renderer = ShapeRenderer(device=device, imsize=image_size, minimum_sharpness=10).to(device)
 
 
 sobel_filter = get_sobel_filter(4, device)
@@ -126,28 +124,35 @@ if __name__ == "__main__":
             b_size = target.size(0)
 
             
-            netG.zero_grad()
+            model.zero_grad()
             with torch.cuda.amp.autocast():
-                pred = netG(target)
+                pred = renderer(model(target))
                 err = criterion(pred, target)
 
             scaler.scale(err).backward()
-            scaler.step(optimizer_netG)
+            scaler.step(optimizer)
 
             scaler.update()
 
             # Check how the generator is doing by saving G's output on fixed_noise
             if (global_step % 500 == 0):
                 with torch.no_grad():
-                    pred_val = netG(fixed_target)
+                    # Render output in smooth training mode
+                    model.eval()
+                    model_pred_val = model(fixed_target)
+                    pred_val = renderer(model_pred_val)
                     err_val = criterion(pred_val, fixed_target)
 
-                    netG.eval()
-                    pred_val_crisp = netG(fixed_target)
-                    netG.train()
+                    # Render output in crisp eval mode
+                    renderer.eval()
+                    pred_val_crisp = renderer(model_pred_val)
 
                     pred_val = unnormalize_functional(to_rgb(pred_val), mean, std)
                     pred_val_crisp = unnormalize_functional(to_rgb(pred_val_crisp), mean, std)
+
+                    # Reset both modules to training
+                    renderer.train()
+                    model.train()
 
 
                 print(err_val.item())
@@ -164,18 +169,18 @@ if __name__ == "__main__":
                 c_path = Path(f"./checkpoints/{date}")
                 c_path.mkdir(parents=True, exist_ok=True)
                 torch.save({
-                    "G": netG.state_dict(),
-                    "opt": optimizer_netG.state_dict()
+                    "G": model.state_dict(),
+                    "opt": optimizer.state_dict()
                 },
                 c_path / f"{global_step}__{err_val.item()}.pt")
 
             # Save tensors each output
             with torch.no_grad():
-                netG.return_mode = "shapes"
-                netG.eval()
-                pred_val_crisp = netG(fixed_target)
-                netG.return_mode = "bitmap"
-                netG.train()
+                model.return_mode = "shapes"
+                model.eval()
+                pred_val_crisp = model(fixed_target)
+                model.return_mode = "bitmap"
+                model.train()
 
             i_path = Path(f"./progress/{date}")
             i_path.mkdir(parents=True, exist_ok=True)
