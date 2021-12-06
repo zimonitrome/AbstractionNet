@@ -23,25 +23,21 @@ n_shapes = 16
 workers = 3
 batch_size = 64
 image_size = 64
-lr = 0.00001
+lr = 1e-5
 
 date = datetime.today().strftime('%Y-%m-%d-%H.%M.%S')
 
 # Decide which device we want to run on
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-class CustomTrans():
-    def __call__(self, tensor):
-        return (tensor > 0.05).float()
-
 def normalize_functional(tensor, mean, std):
-    mean = mean.view(3, 1, 1)
-    std = std.view(3, 1, 1)
+    mean = torch.tensor(mean).view(3, 1, 1).to(device)
+    std = torch.tensor(std).view(3, 1, 1).to(device)
     return (tensor-mean)/std
 
 def unnormalize_functional(tensor, mean, std):
-    mean = mean.view(3, 1, 1)
-    std = std.view(3, 1, 1)
+    mean = torch.tensor(mean).view(3, 1, 1).to(device)
+    std = torch.tensor(std).view(3, 1, 1).to(device)
     return ((tensor*std)+mean).clamp(0, 1)
 
 mean = [0.5061, 0.4254, 0.3828]
@@ -52,9 +48,6 @@ my_transforms = transforms.Compose([
     transforms.ToTensor(),
     transforms.Normalize(mean, std),
 ])
-
-mean = torch.tensor(mean).to(device)
-std =  torch.tensor(std).to(device)
 
 # We can use an image folder dataset the way we have it setup.
 # Create the dataset
