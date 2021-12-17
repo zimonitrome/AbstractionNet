@@ -3,7 +3,7 @@ from torch import nn
 import torchvision.models as models
 from einops import rearrange, repeat
 from soft_sort_by_column import soft_sort_by_column
-from utils import unnormalize_to
+from utils import alpha_composite_multiple, unnormalize_to
 
 
 class ShapeRenderer(nn.Module):
@@ -28,6 +28,7 @@ class ShapeRenderer(nn.Module):
         """
         evaluation_mode = not self.training
         shape_arguments = soft_sort_by_column(shape_arguments, column=1)
+        new_shape_arguments = shape_arguments.clone()
 
         # Rescale some arguments
         # All arguments are assumed to be in the range [0, 1] due to sigmoid in model.
@@ -36,32 +37,32 @@ class ShapeRenderer(nn.Module):
         # These values roughly correspond to 0 and 1 in the normalized color range.
         # Thus, we can unnormalize the image later using the channel mean and std.
         # TODO: This mapping can be learned by the network instead. Better?
-        shape_arguments[..., -3:] = unnormalize_to(shape_arguments[..., -3:], -1.5, 1.5)
+        new_shape_arguments[..., -3:] = unnormalize_to(shape_arguments[..., -3:], -1.5, 1.5)
 
         # Rescale angle from [0, 1] to [0, pi]
-        shape_arguments[..., 6] = torch.pi * shape_arguments[..., 6]
+        new_shape_arguments[..., 6] = torch.pi * shape_arguments[..., 6]
 
         # Rescale x_radius and y_radius from [0, 1] to [eps, 1+eps]
         # Calculate what 1 pixel of the image is as a proportion of [0, 1]
         # Add the half of this value to each radius to assure a minimum size of 1 px per rendered shape.
         half_of_1px = (1 / self.imsize) / 2
-        shape_arguments[..., 3:5] = shape_arguments[..., 3:5] + half_of_1px
+        new_shape_arguments[..., 3:5] = shape_arguments[..., 3:5] + half_of_1px
 
         if evaluation_mode:
             # Make shapes have hard edges
-            shape_arguments[..., 0] = self.evaluation_sharpness
+            new_shape_arguments[..., 0] = self.evaluation_sharpness
 
             # Make shape either square or circle
-            shape_arguments[..., 7] = torch.round(shape_arguments[..., 7])
+            new_shape_arguments[..., 7] = torch.round(shape_arguments[..., 7])
         else:
             # Rescale sharpness to min and max values
-            shape_arguments[..., 0] = unnormalize_to(shape_arguments[..., 0], self.min_sharpness, self.max_sharpness)
+            new_shape_arguments[..., 0] = unnormalize_to(shape_arguments[..., 0], self.min_sharpness, self.max_sharpness)
 
             # Helps restrict inf/nan gradients... maybe
             # TODO: Is this transformation needed?
-            shape_arguments[..., 7] = unnormalize_to(shape_arguments[..., 7], 0.1, 0.9)
+            new_shape_arguments[..., 7] = unnormalize_to(shape_arguments[..., 7], 0.1, 0.9)
 
-        return shape_arguments
+        return new_shape_arguments
 
 
 
@@ -128,14 +129,11 @@ class ShapeRenderer(nn.Module):
 
     def forward(self, shape_arguments, return_mode="bitmap"):
         shape_arguments = self.process_shape_arguments(shape_arguments)
-        
-        if return_mode == "shapes":
-            return shape_arguments
 
         # [B N C W H]
         rencered_squircles = self.draw_colored_squircle(shape_arguments)
 
         # [B C W H]
-        rendered_images = self.composite_shapes(rencered_squircles)
+        rendered_images = alpha_composite_multiple(rencered_squircles)
 
         return rendered_images

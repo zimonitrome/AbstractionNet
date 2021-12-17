@@ -1,8 +1,11 @@
 import torch
 from einops import rearrange
+import svgwrite
 
 
+###########################################
 # Normalization / Standardization functions
+###########################################
 
 def normalize_functional(tensor: torch.Tensor, mean: list, std: list):
     """
@@ -31,7 +34,9 @@ def unnormalize_to(x, x_min, x_max):
     return x * (x_max - x_min) + x_min
 
 
+############################
 # Image convertion functions
+############################
 
 def rgba_to_rgb(rgba: torch.Tensor):
     """
@@ -51,7 +56,9 @@ def rgb_to_rgba(rgb: torch.Tensor, fill: float = 1.0):
     return torch.concat([rgb, alpha_channel], dim=-3)
 
 
+###########################################
 # Alpha compositing/decompositing functions
+###########################################
 
 def alpha_composite(base, added, eps=1e-8):
     """
