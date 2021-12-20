@@ -1,20 +1,19 @@
-import torch
-from torch import nn
-from utils import unnormalize_functional
-import svgwrite
-from ShapeRenderer import ShapeRenderer
 import tempfile
 from PIL import Image
+from einops.einops import rearrange
+import torch
+from src.utils import unnormalize_functional
 from cairosvg import svg2png
-import torchvision.transforms as TF
+import svgwrite
+from pathlib import Path
 
 
 class ShapeRendererSVG():
-    def __init__(self, canvas_size, mean, std):
+    def __init__(self, internal_renderer, canvas_size, mean, std):
         self.canvas_size = canvas_size
         self.mean = mean
         self.std = std
-        self.internal_renderer = ShapeRenderer(device="cpu").eval()
+        self.internal_renderer = internal_renderer
 
     def svg_color(self, r, g, b):
         rgb = torch.tensor([r, g, b]).view(-1, 1, 1)
@@ -22,7 +21,10 @@ class ShapeRendererSVG():
         return svgwrite.rgb(*rgb)
 
     def get_string(self, shapes_args):
-        shapes_args = self.internal_renderer.process_shape_arguments(shapes_args)
+        assert len(shapes_args.shape) == 2, "Shape args should be a single sample without batch."
+        processed_shapes_args = self.internal_renderer.process_shape_arguments(shapes_args.unsqueeze(0)).squeeze()
+        processed_shapes_args = processed_shapes_args.cpu().detach().numpy()
+
         dwg = svgwrite.Drawing(profile='tiny', size=(self.canvas_size, self.canvas_size))
 
         # Add background
@@ -30,8 +32,8 @@ class ShapeRendererSVG():
         dwg.add(dwg.rect(insert=(0, 0), size=(self.canvas_size, self.canvas_size), fill=background_color))
 
         # Add shapes
-        for shape_args in shapes_args:
-            _, _, pos_y, pos_x, height, width, angle, squareness, r, g, b = shape_args.numpy()
+        for shape_args in processed_shapes_args:
+            _, _, pos_y, pos_x, height, width, angle, squareness, r, g, b = shape_args
             # Move/rescale shapes according to canvas size
             # Uses a single canvas_size (square) since width/height is ambiguous for roateted shapes.
             # Non-square canvas sizes could maybe be implemented with other transforms (translate, rescale).
@@ -55,11 +57,14 @@ class ShapeRendererSVG():
             svg_file.write(svg_string)
 
     def save_png(self, shapes_args, png_path):
-        with tempfile.NamedTemporaryFile(suffix=".svg") as svg_path:
-            self.save_svg(shapes_args, svg_path.name)
-            with open(svg_path.name, mode="rb") as svg_file:
-                svg2png(bytestring=svg_file.read(), write_to=str(png_path))
-            svg_path.unlink()
+        svg_file = tempfile.NamedTemporaryFile(suffix=".svg", delete=False)
+        svg_path = Path(svg_file.name)
+        svg_file.close()
+
+        self.save_svg(shapes_args, svg_path)
+        with open(svg_path, mode="rb") as svg_file:
+            svg2png(bytestring=svg_file.read(), write_to=str(png_path))
+        svg_path.unlink()
 
     def to_pil_image(self, shape_args):
         with tempfile.NamedTemporaryFile(suffix=".png") as png_path:

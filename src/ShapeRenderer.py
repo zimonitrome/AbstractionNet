@@ -1,9 +1,8 @@
 import torch
 from torch import nn
-import torchvision.models as models
 from einops import rearrange, repeat
-from soft_sort_by_column import soft_sort_by_column
-from utils import alpha_composite_multiple, unnormalize_to
+from src.SoftSortByColumn import soft_sort_by_column
+from src.utils import alpha_composite_multiple, unnormalize_to
 
 
 class ShapeRenderer(nn.Module):
@@ -27,7 +26,7 @@ class ShapeRenderer(nn.Module):
         [B N A] -> [B N A]
         """
         evaluation_mode = not self.training
-        shape_arguments = soft_sort_by_column(shape_arguments, column=1)
+        shape_arguments = soft_sort_by_column(shape_arguments, regularization="l2", regularization_strength=1.0, column=1)
         new_shape_arguments = shape_arguments.clone()
 
         # Rescale some arguments
@@ -54,6 +53,7 @@ class ShapeRenderer(nn.Module):
 
             # Make shape either square or circle
             new_shape_arguments[..., 7] = torch.round(shape_arguments[..., 7])
+            print("AA", new_shape_arguments.min(), new_shape_arguments.mean(), new_shape_arguments.max())
         else:
             # Rescale sharpness to min and max values
             new_shape_arguments[..., 0] = unnormalize_to(shape_arguments[..., 0], self.min_sharpness, self.max_sharpness)
@@ -61,6 +61,7 @@ class ShapeRenderer(nn.Module):
             # Helps restrict inf/nan gradients... maybe
             # TODO: Is this transformation needed?
             new_shape_arguments[..., 7] = unnormalize_to(shape_arguments[..., 7], 0.1, 0.9)
+
 
         return new_shape_arguments
 
@@ -77,6 +78,7 @@ class ShapeRenderer(nn.Module):
 
         # Move argument dimension furthest out and add 2 dimensions
         sharpness, pos_z, pos_x, pos_y, radius_x, radius_y, angle, squareness = repeat(args_tensor, "... (A H W) -> A ... H W", H=1, W=1)
+        print("bb_0", args_tensor.min(), args_tensor.mean(), args_tensor.max())
 
         # Get ramps ready (efficient way)
         # Get any trailing dimensions (i.e. [...])
@@ -101,13 +103,20 @@ class ShapeRenderer(nn.Module):
         # https://en.wikipedia.org/wiki/Squircle#Fern%C3%A1ndez%E2%80%93Guasti_squircle
         x_s = scaled_x**2
         y_s = scaled_y**2
+        print("bb", scaled_x.min(), scaled_x.mean(), scaled_x.max())
         p = -(x_s + y_s)
+        print("p", p.min(), p.mean(), p.max())
         q = x_s * y_s * squareness
-        squircle = (-p / 2 + ( (p/2)**2 - q + eps)**.5)**.5
+        print("q", q.min(), q.mean(), q.max())
+        squircle = (-p / 2 + ( (p/2)**2 - q + eps)**.5 + eps)**.5
+
+        print("BB", squircle.min(), squircle.mean(), squircle.max())
+
 
         # Adjust sharpness
         image = sharpness*(1 - squircle)
         image = torch.sigmoid(image)
+        print("CC", squircle.min(), squircle.mean(), squircle.max())
 
         return image
 
@@ -127,7 +136,7 @@ class ShapeRenderer(nn.Module):
         ], dim=-3)
 
 
-    def forward(self, shape_arguments, return_mode="bitmap"):
+    def forward(self, shape_arguments):
         shape_arguments = self.process_shape_arguments(shape_arguments)
 
         # [B N C W H]

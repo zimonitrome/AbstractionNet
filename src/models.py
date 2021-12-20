@@ -1,8 +1,6 @@
 import torch
 from torch import nn
 import torchvision.models as models
-from einops import rearrange, repeat
-from soft_sort_by_column import soft_sort_by_column
 
 def freeze(model):
     for param in model.parameters():

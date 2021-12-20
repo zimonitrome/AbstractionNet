@@ -52,7 +52,7 @@ def rgb_to_rgba(rgb: torch.Tensor, fill: float = 1.0):
     Alpha layer will be filled with 1 by default, but can also be specified.
     [... 3 H W] -> [... 4 H W]
     """
-    alpha_channel = torch.full_like(rgb[..., 0, :, :], fill_value=fill)
+    alpha_channel = torch.full_like(rgb[..., :1, :, :], fill_value=fill)
     return torch.concat([rgb, alpha_channel], dim=-3)
 
 
