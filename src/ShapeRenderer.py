@@ -16,7 +16,7 @@ class ShapeRenderer(nn.Module):
 
         self.min_sharpness = minimum_sharpness
         self.max_sharpness = 20
-        self.evaluation_sharpness = 200
+        self.eps = 1e-8
 
 
     def process_shape_arguments(self, shape_arguments):
@@ -25,7 +25,6 @@ class ShapeRenderer(nn.Module):
         Most values are good within the [0, 1] range but a few arguments need different scales.
         [B N A] -> [B N A]
         """
-        evaluation_mode = not self.training
         shape_arguments = soft_sort_by_column(shape_arguments, regularization="l2", regularization_strength=1.0, column=1)
         new_shape_arguments = shape_arguments.clone()
 
@@ -47,21 +46,16 @@ class ShapeRenderer(nn.Module):
         half_of_1px = (1 / self.imsize) / 2
         new_shape_arguments[..., 3:5] = shape_arguments[..., 3:5] + half_of_1px
 
-        if evaluation_mode:
-            # Make shapes have hard edges
-            new_shape_arguments[..., 0] = self.evaluation_sharpness
+        # Rescale sharpness to min and max values
+        new_shape_arguments[..., 0] = unnormalize_to(shape_arguments[..., 0], self.min_sharpness, self.max_sharpness)
 
-            # Make shape either square or circle
-            new_shape_arguments[..., 7] = torch.round(shape_arguments[..., 7])
-
-        else:
-            # Rescale sharpness to min and max values
-            new_shape_arguments[..., 0] = unnormalize_to(shape_arguments[..., 0], self.min_sharpness, self.max_sharpness)
-
+        if self.training:
             # Helps restrict inf/nan gradients... maybe
             # TODO: Is this transformation needed?
             new_shape_arguments[..., 7] = unnormalize_to(shape_arguments[..., 7], 0.1, 0.9)
-
+        else:
+            # Make shape either square or circle
+            new_shape_arguments[..., 7] = torch.round(shape_arguments[..., 7])
 
         return new_shape_arguments
 
@@ -74,8 +68,6 @@ class ShapeRenderer(nn.Module):
         
         [..., A] -> [..., H, W]
         """
-        eps = 1e-8
-
         # Move argument dimension furthest out and add 2 dimensions
         sharpness, pos_z, pos_x, pos_y, radius_x, radius_y, angle, squareness = repeat(args_tensor, "... (A H W) -> A ... H W", H=1, W=1)
 
@@ -104,15 +96,16 @@ class ShapeRenderer(nn.Module):
         y_s = scaled_y**2
         p = -(x_s + y_s)
         q = x_s * y_s * squareness
-        squircle = (-p / 2 + ( (p/2)**2 - q + eps)**.5 + eps)**.5
-
-
+        squircle = (-p / 2 + ( (p/2)**2 - q + self.eps)**.5 + self.eps)**.5
 
         # Adjust sharpness
         image = sharpness*(1 - squircle)
         image = torch.sigmoid(image)
 
-        return image
+        if self.training:
+            return image
+        else:
+            return (image > 0.5).float()
 
 
     def draw_colored_squircle(self, args_tensor):

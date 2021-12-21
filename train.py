@@ -17,7 +17,7 @@ import tables
 
 # Customizable variables
 n_shapes = 16
-workers = 3
+workers = 0
 batch_size = 64
 image_size = 64
 lr = 1e-5
@@ -73,7 +73,7 @@ def criterion(pred_image, target):
     # return 0.9*general_loss + 0.1*detail_loss
 
 # Nice tools to speed up training
-torch.backends.cudnn.benchmark = True
+# torch.backends.cudnn.benchmark = True
 scaler = torch.cuda.amp.GradScaler()
 
 # Start training loop
@@ -107,9 +107,9 @@ if __name__ == "__main__":
 
                     # Render output in crisp eval mode
                     renderer.eval()
-                    print(shape_arguments_val.min(), shape_arguments_val.mean(), shape_arguments_val.max())
+                    # print(shape_arguments_val.min(), shape_arguments_val.mean(), shape_arguments_val.max())
                     pred_val_crisp = renderer(shape_arguments_val)
-                    print(pred_val_crisp.min(), pred_val_crisp.mean(), pred_val_crisp.max())
+                    # print(pred_val_crisp.min(), pred_val_crisp.mean(), pred_val_crisp.max())
 
 
                     pred_val = unnormalize_functional(rgba_to_rgb(pred_val), mean, std)
@@ -130,6 +130,7 @@ if __name__ == "__main__":
                 i_path = Path(f"./progress/{date}")
                 i_path.mkdir(parents=True, exist_ok=True)
                 vutils.save_image(total_image, i_path / f"{global_step}__{loss_val.item()}.png")
+                exit()
 
             # Save model in /checkpoints/<date>/<name>.pt
             if (global_step % save_model_interval == 0):
