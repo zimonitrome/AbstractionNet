@@ -1,10 +1,10 @@
-from filters import get_sobel_filter, get_static_fast_gauss_blur
-from utils import *
-from models import Model
-from render_shape import ShapeRenderer
+from src.filters import get_sobel_filter, get_static_fast_gauss_blur
+from src.utils import *
+from src.models import Model
+from src.ShapeRenderer import ShapeRenderer
 import torch
 from torch import nn
-import torch.optim as optim
+from torch import optim
 import torch.utils.data
 from torchvision.datasets import ImageFolder
 import torchvision.transforms as T
@@ -63,13 +63,14 @@ def criterion(pred_image, target):
     rgba_target = rgb_to_rgba(target)
 
     general_loss = nn.functional.mse_loss(pred_image, rgba_target)
+    return general_loss
 
-    detail_loss = nn.functional.l1_loss(
-        sobel_filter(pred_image),
-        sobel_filter(rgba_target)
-    )
+    # detail_loss = nn.functional.l1_loss(
+    #     sobel_filter(pred_image),
+    #     sobel_filter(rgba_target)
+    # )
 
-    return 0.9*general_loss + 0.1*detail_loss
+    # return 0.9*general_loss + 0.1*detail_loss
 
 # Nice tools to speed up training
 torch.backends.cudnn.benchmark = True
@@ -106,7 +107,10 @@ if __name__ == "__main__":
 
                     # Render output in crisp eval mode
                     renderer.eval()
+                    print(shape_arguments_val.min(), shape_arguments_val.mean(), shape_arguments_val.max())
                     pred_val_crisp = renderer(shape_arguments_val)
+                    print(pred_val_crisp.min(), pred_val_crisp.mean(), pred_val_crisp.max())
+
 
                     pred_val = unnormalize_functional(rgba_to_rgb(pred_val), mean, std)
                     pred_val_crisp = unnormalize_functional(rgba_to_rgb(pred_val_crisp), mean, std)

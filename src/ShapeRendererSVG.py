@@ -6,6 +6,7 @@ from src.utils import unnormalize_functional
 from cairosvg import svg2png
 import svgwrite
 from pathlib import Path
+from copy import copy
 
 
 class ShapeRendererSVG():
@@ -67,7 +68,13 @@ class ShapeRendererSVG():
         svg_path.unlink()
 
     def to_pil_image(self, shape_args):
-        with tempfile.NamedTemporaryFile(suffix=".png") as png_path:
-            self.save_png(shape_args, png_path.name)
-            image = Image.open(png_path)
+        png_file = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+        png_path = Path(png_file.name)
+        png_file.close()
+
+        self.save_png(shape_args, png_path)
+        image = copy(Image.open(png_path))
+
+        png_path.unlink()
+
         return image

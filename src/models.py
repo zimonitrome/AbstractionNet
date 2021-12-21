@@ -36,19 +36,24 @@ class Model(nn.Module):
             nn.Sigmoid(),
         )
 
+        initial_bias = self.grid_init(n_shapes, npf)
+        self.main[-3].bias.data.copy_(
+            initial_bias.flatten().float()
+        )
+
+    @staticmethod
+    def grid_init(n_shapes, n_parameter_fields):
         # Initialize all shapes to be in 4x4 grid (Optional but looks cool)
         nrow = int(n_shapes**.5)
         radius = 1/(2*nrow)
         xy_positions = torch.linspace(0+radius, 1-radius, nrow)
         x_positions, y_positions = torch.meshgrid(xy_positions, xy_positions)
-        unit_tensor = torch.full([n_shapes, npf], 0.5)
+        unit_tensor = torch.full([n_shapes, n_parameter_fields], 0.5)
         unit_tensor[:, 2] = x_positions.flatten()
         unit_tensor[:, 3] = y_positions.flatten()
         unit_tensor[:, 4] = radius-0.02
         unit_tensor[:, 5] = radius-0.02
-        self.main[-3].bias.data.copy_(
-            torch.logit(unit_tensor).flatten().float()
-        )
+        return torch.logit(unit_tensor)
 
     def forward(self, input_tensor):
         return self.main(input_tensor)

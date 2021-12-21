@@ -53,7 +53,7 @@ class ShapeRenderer(nn.Module):
 
             # Make shape either square or circle
             new_shape_arguments[..., 7] = torch.round(shape_arguments[..., 7])
-            print("AA", new_shape_arguments.min(), new_shape_arguments.mean(), new_shape_arguments.max())
+
         else:
             # Rescale sharpness to min and max values
             new_shape_arguments[..., 0] = unnormalize_to(shape_arguments[..., 0], self.min_sharpness, self.max_sharpness)
@@ -78,7 +78,6 @@ class ShapeRenderer(nn.Module):
 
         # Move argument dimension furthest out and add 2 dimensions
         sharpness, pos_z, pos_x, pos_y, radius_x, radius_y, angle, squareness = repeat(args_tensor, "... (A H W) -> A ... H W", H=1, W=1)
-        print("bb_0", args_tensor.min(), args_tensor.mean(), args_tensor.max())
 
         # Get ramps ready (efficient way)
         # Get any trailing dimensions (i.e. [...])
@@ -103,20 +102,15 @@ class ShapeRenderer(nn.Module):
         # https://en.wikipedia.org/wiki/Squircle#Fern%C3%A1ndez%E2%80%93Guasti_squircle
         x_s = scaled_x**2
         y_s = scaled_y**2
-        print("bb", scaled_x.min(), scaled_x.mean(), scaled_x.max())
         p = -(x_s + y_s)
-        print("p", p.min(), p.mean(), p.max())
         q = x_s * y_s * squareness
-        print("q", q.min(), q.mean(), q.max())
         squircle = (-p / 2 + ( (p/2)**2 - q + eps)**.5 + eps)**.5
 
-        print("BB", squircle.min(), squircle.mean(), squircle.max())
 
 
         # Adjust sharpness
         image = sharpness*(1 - squircle)
         image = torch.sigmoid(image)
-        print("CC", squircle.min(), squircle.mean(), squircle.max())
 
         return image
 
